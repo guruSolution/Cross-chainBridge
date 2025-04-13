@@ -34,3 +34,17 @@
     )
   )
 )
+
+;; Set a new admin
+(define-public (set-admin (new-admin principal))
+  (begin 
+    (asserts! (is-admin) (err u5))
+    (var-set bridge-admin new-admin)
+    (ok true)
+  )
+)
+
+;; Get locked balance
+(define-read-only (get-locked-balance (user principal))
+  (default-to u0 (map-get? locked-assets user))
+)

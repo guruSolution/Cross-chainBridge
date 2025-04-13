@@ -13,6 +13,12 @@
 (define-private (is-admin)
   (is-eq tx-sender (var-get bridge-admin))
 )
+;; Define liquidity pools for fast transfers
+(define-map liquidity-pools 
+  { token-id: (string-ascii 32) }
+  { balance: uint, fee-percentage: uint }
+)
+
 
 ;; Lock tokens on Stacks side
 (define-public (lock-tokens (amount uint) (target-chain (buff 32)))
@@ -47,4 +53,24 @@
 ;; Get locked balance
 (define-read-only (get-locked-balance (user principal))
   (default-to u0 (map-get? locked-assets user))
+)
+;; Provide liquidity to the bridge
+(define-public (provide-liquidity 
+    (token-id (string-ascii 32)) 
+    (amount uint))
+  (begin
+    (asserts! (> amount u0) (err u10))
+    (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
+    
+    ;; Update pool balance
+    (map-set liquidity-pools
+      { token-id: token-id }
+      { 
+        balance: (+ amount (get balance (default-to { balance: u0, fee-percentage: u0 } 
+          (map-get? liquidity-pools { token-id: token-id })))),
+        fee-percentage: (get fee-percentage (default-to { balance: u0, fee-percentage: u30 } 
+          (map-get? liquidity-pools { token-id: token-id })))
+      })
+    (ok true)
+  )
 )

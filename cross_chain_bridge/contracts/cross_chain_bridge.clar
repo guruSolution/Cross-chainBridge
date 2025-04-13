@@ -153,3 +153,39 @@
     )
   )
 )
+
+(define-public (approve-operation (operation-id uint))
+  (begin
+    (asserts! (default-to false (map-get? signers tx-sender)) (err u40))
+    (let ((op (unwrap! (map-get? pending-operations operation-id) (err u41))))
+      (map-set pending-operations operation-id {
+        operation: (get operation op),
+        params: (get params op),
+        approvals: (+ (get approvals op) u1)
+      })
+      (ok true)
+    )
+  )
+)
+
+;; Execute operation if threshold reached
+(define-public (execute-operation (operation-id uint))
+  (let (
+    (op (unwrap! (map-get? pending-operations operation-id) (err u41)))
+  )
+    (asserts! (>= (get approvals op) (var-get required-signatures)) (err u42))
+    
+    ;; Execute based on operation type
+    (if (is-eq (get operation op) "unlock")
+      (unlock-by-multisig (unwrap! (element-at (get params op) u0) (err u43))
+                         (unwrap! (element-at (get params op) u1) (err u43)))
+      (err u44)) ;; Unknown operation
+  )
+)
+
+(define-private (unlock-by-multisig (recipient-index uint) (amount uint))
+  (let ((recipient (unwrap! (element-at (list-principals) recipient-index) (err u50))))
+    ;; Perform the actual unlock
+    (as-contract (stx-transfer? amount tx-sender recipient))
+  )
+)

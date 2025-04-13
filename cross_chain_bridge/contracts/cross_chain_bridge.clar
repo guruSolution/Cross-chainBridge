@@ -13,3 +13,24 @@
 (define-private (is-admin)
   (is-eq tx-sender (var-get bridge-admin))
 )
+
+;; Lock tokens on Stacks side
+(define-public (lock-tokens (amount uint) (target-chain (buff 32)))
+  (begin
+    (asserts! (> amount u0) (err u1))
+    (try! (stx-transfer? amount tx-sender (as-contract tx-sender)))
+    
+    ;; Track locked assets
+    (map-set locked-assets tx-sender 
+      (+ (default-to u0 (map-get? locked-assets tx-sender)) amount))
+      
+    ;; Create bridge request
+    (let ((request-id (var-get request-counter)))
+      (map-set bridge-requests 
+        (tuple (user tx-sender) (amount amount) (target-chain target-chain)) 
+        request-id)
+      (var-set request-counter (+ request-id u1))
+      (ok request-id)
+    )
+  )
+)

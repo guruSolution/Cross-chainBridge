@@ -13,6 +13,12 @@
 (define-private (is-admin)
   (is-eq tx-sender (var-get bridge-admin))
 )
+
+;; Track bridged NFTs
+(define-map bridged-nfts 
+  { original-contract: principal, token-id: uint, chain-id: (buff 32) }
+  { owner: principal, status: (string-ascii 20) }
+)
 ;; Define liquidity pools for fast transfers
 (define-map liquidity-pools 
   { token-id: (string-ascii 32) }
@@ -71,6 +77,24 @@
         fee-percentage: (get fee-percentage (default-to { balance: u0, fee-percentage: u30 } 
           (map-get? liquidity-pools { token-id: token-id })))
       })
+    (ok true)
+  )
+)
+
+;; Bridge an NFT to another chain
+(define-public (bridge-nft 
+    (nft-contract principal) 
+    (token-id uint)
+    (target-chain (buff 32)))
+  (begin
+    ;; Transfer NFT to contract custody
+    (try! (contract-call? nft-contract transfer token-id tx-sender (as-contract tx-sender)))
+    
+    ;; Record the bridging request
+    (map-set bridged-nfts
+      { original-contract: nft-contract, token-id: token-id, chain-id: target-chain }
+      { owner: tx-sender, status: "pending" })
+      
     (ok true)
   )
 )

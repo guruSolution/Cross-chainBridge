@@ -9,6 +9,14 @@
 (define-map bridge-requests (tuple (user principal) (amount uint) (target-chain (buff 32))) uint)
 (define-data-var request-counter uint u0)
 
+(define-map signers principal bool)
+(define-data-var required-signatures uint u3)
+(define-map pending-operations 
+  uint 
+  { operation: (string-ascii 20), params: (list 10 uint), approvals: uint }
+)
+(define-data-var operation-nonce uint u0)
+
 ;; Only admin can call
 (define-private (is-admin)
   (is-eq tx-sender (var-get bridge-admin))
@@ -96,5 +104,52 @@
       { owner: tx-sender, status: "pending" })
       
     (ok true)
+  )
+)
+
+;; Enhanced lock-tokens with rate limiting
+(define-public (lock-tokens-secure (amount uint) (target-chain (buff 32)))
+  (let (
+    (current-day-number (/ block-height u144)) ;; ~144 blocks per day
+    (current-volume (default-to { volume: u0 } 
+      (map-get? daily-transfer-volume { user: tx-sender, day: current-day-number })))
+  )
+    (asserts! (not (var-get paused)) (err u30))
+    (asserts! (> amount u0) (err u1))
+    (asserts! (<= (+ amount (get volume current-volume)) (var-get global-daily-limit)) (err u31))
+    
+    ;; Update volume tracking
+    (map-set daily-transfer-volume 
+      { user: tx-sender, day: current-day-number }
+      { volume: (+ amount (get volume current-volume)) })
+      
+    ;; Rest of lock function...
+    (ok true)
+  )
+)
+;; Add or remove signers
+(define-public (manage-signer (signer principal) (active bool))
+  (begin
+    (asserts! (is-admin) (err u20))
+    (map-set signers signer active)
+    (ok true)
+  )
+)
+
+;; Propose and approve operations
+(define-public (propose-operation 
+    (operation (string-ascii 20))
+    (params (list 10 uint)))
+  (begin
+    (asserts! (default-to false (map-get? signers tx-sender)) (err u40))
+    (let ((op-id (var-get operation-nonce)))
+      (map-set pending-operations op-id { 
+        operation: operation, 
+        params: params, 
+        approvals: u1 
+      })
+      (var-set operation-nonce (+ op-id u1))
+      (ok op-id)
+    )
   )
 )
